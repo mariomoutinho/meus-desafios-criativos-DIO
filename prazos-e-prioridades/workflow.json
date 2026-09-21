@@ -1,0 +1,71 @@
+{
+  "name": "Exercicio - Prazos e prioridades",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual",
+      "name": "Iniciar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\"dataReferencia\": \"2026-09-21\", \"tarefas\": [{\"id\": \"T1\", \"titulo\": \"Enviar proposta\", \"vencimento\": \"2026-09-20\", \"concluida\": false}, {\"id\": \"T2\", \"titulo\": \"Revisar texto\", \"vencimento\": \"2026-09-23\", \"concluida\": false}, {\"id\": \"T3\", \"titulo\": \"Organizar arquivos\", \"vencimento\": \"2026-09-30\", \"concluida\": false}, {\"id\": \"T4\", \"titulo\": \"Estudar n8n\", \"vencimento\": \"2026-09-19\", \"concluida\": true}]} }];"
+      },
+      "id": "sample",
+      "name": "Dados de exemplo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const entrada = $input.first().json;\nconst erro = (detalhe) => [{json:{status:'ENTRADA_INVALIDA',detalhe,grupos:null}}];\nconst dataValida = (s) => { if (typeof s !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return null; const d=new Date(s+'T00:00:00Z'); return Number.isFinite(d.valueOf()) && d.toISOString().slice(0,10)===s ? d.valueOf() : null; };\nif (!entrada || !Array.isArray(entrada.tarefas)) return erro('tarefas deve ser uma lista');\nconst referencia=dataValida(entrada.dataReferencia);\nif (referencia===null) return erro('dataReferencia deve ser uma data YYYY-MM-DD válida');\nif (entrada.tarefas.length===0) return [{json:{status:'SEM_DADOS',dataReferencia:entrada.dataReferencia,total:0,grupos:{atrasadas:[],proximas:[],futuras:[],concluidas:[]}}}];\nconst ids=new Set(), itens=[];\nfor (const [i,t] of entrada.tarefas.entries()) {\n  if (!t || typeof t !== 'object' || Array.isArray(t)) return erro(`tarefa ${i+1} inválida`);\n  if (typeof t.id !== 'string' || !t.id.trim() || ids.has(t.id.trim()) || typeof t.titulo !== 'string' || !t.titulo.trim() || typeof t.concluida !== 'boolean') return erro(`campos inválidos ou id repetido na tarefa ${i+1}`);\n  const prazo=dataValida(t.vencimento); if (prazo===null) return erro(`vencimento inválido na tarefa ${i+1}`);\n  ids.add(t.id.trim()); itens.push({id:t.id.trim(),titulo:t.titulo.trim(),vencimento:t.vencimento,concluida:t.concluida,diasRestantes:Math.round((prazo-referencia)/86400000)});\n}\nconst grupos={atrasadas:[],proximas:[],futuras:[],concluidas:[]};\nfor (const t of itens) {\n  const {concluida,...resumo}=t;\n  const grupo=concluida?'concluidas':t.diasRestantes<0?'atrasadas':t.diasRestantes<=3?'proximas':'futuras';\n  grupos[grupo].push(resumo);\n}\nfor (const valores of Object.values(grupos)) valores.sort((a,b)=>a.diasRestantes-b.diasRestantes || a.id.localeCompare(b.id));\nreturn [{json:{status:'RESUMO_OK',dataReferencia:entrada.dataReferencia,total:itens.length,contagens:Object.fromEntries(Object.entries(grupos).map(([k,v])=>[k,v.length])),grupos}}];",
+        "mode": "runOnceForAllItems"
+      },
+      "id": "process",
+      "name": "Analisar dados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Iniciar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Dados de exemplo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dados de exemplo": {
+      "main": [
+        [
+          {
+            "node": "Analisar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
