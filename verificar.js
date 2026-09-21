@@ -1,0 +1,32 @@
+const fs = require('fs');
+const vm = require('vm');
+const assert = require('assert/strict');
+function run(dir, data) {
+  const workflow = JSON.parse(fs.readFileSync(`${dir}/workflow.json`, 'utf8'));
+  assert.equal(workflow.active,false);
+  assert.deepEqual(workflow.nodes.map(n=>n.type),['n8n-nodes-base.manualTrigger','n8n-nodes-base.code','n8n-nodes-base.code']);
+  const code = workflow.nodes[2].parameters.jsCode;
+  const output = vm.runInNewContext(`(function(){${code}})()`, {$input:{first:()=>({json:data})}, Date, Set, Number, Object, Math, Array});
+  assert.equal(output.length,1);
+  assert.equal(typeof output[0].json.status,'string');
+  return output[0].json;
+}
+const agenda='conflitos-de-agenda', prazos='prazos-e-prioridades';
+const a=JSON.parse(fs.readFileSync(`${agenda}/exemplo.json`));
+assert.equal(run(agenda,a).quantidadeConflitos,1);
+assert.equal(run(agenda,a).conflitos[0].minutosSobrepostos,30);
+assert.equal(run(agenda,{compromissos:[]}).status,'SEM_DADOS');
+assert.equal(run(agenda,{compromissos:[a.compromissos[0],a.compromissos[2]]}).status,'AGENDA_LIVRE');
+assert.equal(run(agenda,{compromissos:[a.compromissos[0],{...a.compromissos[0]}]}).status,'ENTRADA_INVALIDA');
+assert.equal(run(agenda,{compromissos:[{...a.compromissos[0],fim:a.compromissos[0].inicio}]}).status,'ENTRADA_INVALIDA');
+assert.equal(run(agenda,{compromissos:[{...a.compromissos[0],inicio:'2026-02-30T09:00:00-03:00'}]}).status,'ENTRADA_INVALIDA');
+const p=JSON.parse(fs.readFileSync(`${prazos}/exemplo.json`));
+const result=run(prazos,p);
+assert.deepEqual(JSON.parse(JSON.stringify(result.contagens)),{atrasadas:1,proximas:1,futuras:1,concluidas:1});
+assert.equal(run(prazos,{dataReferencia:p.dataReferencia,tarefas:[]}).status,'SEM_DADOS');
+assert.equal(run(prazos,{...p,dataReferencia:'2026-02-30'}).status,'ENTRADA_INVALIDA');
+assert.equal(run(prazos,{...p,tarefas:[p.tarefas[0],{...p.tarefas[0]}]}).status,'ENTRADA_INVALIDA');
+assert.equal(run(prazos,{...p,tarefas:[{...p.tarefas[0],concluida:'false'}]}).status,'ENTRADA_INVALIDA');
+assert.equal(run(prazos,{...p,tarefas:[{...p.tarefas[0],vencimento:'2026-09-24'}]}).grupos.proximas.length,1);
+assert.equal(run(prazos,{...p,tarefas:[{...p.tarefas[0],vencimento:'2026-09-25'}]}).grupos.futuras.length,1);
+console.log('14 verificações de comportamento e estrutura concluídas.');
